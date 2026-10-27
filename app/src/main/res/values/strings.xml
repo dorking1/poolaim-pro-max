@@ -33,4 +33,24 @@
     <string name="table_detect_confirm">تأكيد الحدود</string>
     <string name="table_detect_drag_corners">اسحب أركان الطاولة الأربعة لمطابقتها مع الصورة</string>
     <string name="table_detect_confidence">درجة الثقة</string>
+
+    <!-- Ball detection -->
+    <string name="ball_detect_searching">جارٍ كشف الكرات…</string>
+    <string name="ball_detect_error">فشل كشف الكرات — أعد المحاولة أو استخدم صورة أوضح</string>
+    <string name="ball_detect_confirm">تأكيد الكرات</string>
+    <string name="ball_detect_yours">كراتك</string>
+    <string name="ball_detect_opponent">كرات الخصم</string>
+
+    <!-- Shot plan -->
+    <string name="shot_plan_title">خطة الضربة</string>
+    <string name="shot_plan_no_shot">لا توجد ضربة ممكنة بهذه التشكيلة — جرّب إعادة الكشف</string>
+    <string name="shot_plan_finish">تم — إنهاء التحليل</string>
+    <string name="shot_plan_difficulty_easy">سهلة</string>
+    <string name="shot_plan_difficulty_medium">متوسطة</string>
+    <string name="shot_plan_difficulty_hard">صعبة</string>
+    <string name="shot_plan_difficulty_very_hard">صعبة جدًا</string>
+
+    <!-- History -->
+    <string name="history_title">سجل التحليلات</string>
+    <string name="history_empty">لا توجد تحليلات محفوظة بعد</string>
 </resources>
