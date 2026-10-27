@@ -1,5 +1,14 @@
-# PoolAim Pro Max default ProGuard rules.
-# Compose and Kotlin-specific rules are handled automatically.
+# PoolAim Pro Max ProGuard rules.
 
-# Keep models used with Room
+# Keep domain models used with Room and serialization
 -keep class com.poolaim.promax.data.local.entity.** { *; }
+-keep class com.poolaim.promax.domain.model.** { *; }
+
+# OpenCV native bridge: keep all JNI entry points
+-keep class org.opencv.** { *; }
+-dontwarn org.opencv.**
+
+# Coroutines
+-dontwarn kotlinx.coroutines.**
+
+# Compose compiler handles its own rules automatically.
