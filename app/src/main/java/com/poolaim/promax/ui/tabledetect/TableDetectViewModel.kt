@@ -57,7 +57,7 @@ class TableDetectViewModel(
                 TableBoundaryDetector.DetectionResult.Failure -> {
                     // Fallback: user drags the four corners manually.
                     UiState.ManualCalibration(
-                        uri = uri,
+                        imageUri = uri,
                         corners = defaultCorners(),
                     )
                 }

@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.onSizeChanged
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -111,7 +111,7 @@ fun ShotPlanScreen(
                             .weight(0.45f)
                             .fillMaxWidth(),
                     ) {
-                        items(plan.candidates.take(8), key = { it.targetBall.centerX.toLong() * 1000 + it.pocket.x.toLong() }) { shot ->
+                        items(plan.candidates.take(8)) { shot ->
                             ShotRow(
                                 shot = shot,
                                 isSelected = shot == best,
