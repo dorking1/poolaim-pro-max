@@ -40,6 +40,15 @@ class BallDetectViewModel(
     private val _state = MutableStateFlow<UiState>(UiState.Idle)
     val state: StateFlow<UiState> = _state
 
+    /**
+     * Latest successful detection (null before first success). Consumed by
+     * the ShotPlan screen (Phase D) when navigating forward.
+     */
+    fun latestDetection(): Triple<TableModel, List<BallModel>, BallModel?>? {
+        val s = _state.value as? UiState.Success ?: return null
+        return Triple(s.table, s.allBalls, s.cueBall)
+    }
+
     fun detect(uri: Uri, table: TableModel) {
         _state.value = UiState.Detecting(uri)
 
