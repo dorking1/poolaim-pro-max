@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.poolaim.promax.ui.theme.PoolAimTheme
+import com.poolaim.promax.ui.navigation.PoolAimNavHost
 
 class MainActivity : ComponentActivity() {
 
@@ -13,7 +14,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PoolAimTheme {
-                // Navigation graph is added in the next phase.
+                PoolAimNavHost(activity = this)
             }
         }
     }
