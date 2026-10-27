@@ -1,15 +1,18 @@
 package com.poolaim.promax.ui.shotplan
 
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.onSizeChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -40,14 +43,14 @@ import com.poolaim.promax.domain.model.BallModel
 import com.poolaim.promax.domain.model.TableModel
 import com.poolaim.promax.domain.physics.Difficulty
 import com.poolaim.promax.domain.physics.ShotCandidate
-import java.net.URLDecoder
 
-private val AIM_COLOR = Color(0xFFFFEB3B) // yellow aim line
-private val GHOST_COLOR = Color(0xFF4CAF50) // ghost contact marker
+private val AIM_COLOR = Color(0xFFFFEB3B)
+private val GHOST_COLOR = Color(0xFF4CAF50)
 
 /**
- * Phase D screen: draws the best shot's aim line (cue -> ghost -> target
- * -> pocket) over the table image, plus a ranked list of alternatives.
+ * Phase E: interactive AimBoard. The user can tap a shot in the ranked
+ * list to switch the aim-line overlay on the image. Best shot is shown
+ * by default.
  */
 @Composable
 fun ShotPlanScreen(
@@ -58,6 +61,7 @@ fun ShotPlanScreen(
     onFinished: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
+    var selectedShot by remember { mutableStateOf<ShotCandidate?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -82,11 +86,11 @@ fun ShotPlanScreen(
 
             is ShotPlanViewModel.UiState.Success -> {
                 val plan = s.plan
-                val best = plan.bestShot
+                val best = selectedShot ?: plan.bestShot
 
                 if (best != null) {
                     AimOverlay(
-                        imageUri = imageUri,
+                        imageUri = Uri.parse(imageUri),
                         table = table,
                         shot = best,
                         cueBall = plan.cueBall,
@@ -94,19 +98,25 @@ fun ShotPlanScreen(
                     )
 
                     Text(
-                        text = "أفضل ضربة: زاوية قطع ${"%.1f".format(best.cutAngleDeg)}° — " +
-                            "الصعوبة: ${difficultyLabel(best.difficulty)}",
+                        text = "زاوية القطع ${"%.1f".format(best.cutAngleDeg)}° — " +
+                            "الصعوبة: ${difficultyLabel(best.difficulty)}" +
+                            if (best.blockersOnCuePath.size + best.blockersOnTargetPath.size > 0) {
+                                " — ⚠ مسدودة جزئيًا"
+                            } else "",
                         style = MaterialTheme.typography.titleMedium,
                     )
 
-                    // Ranked alternatives.
                     LazyColumn(
                         modifier = Modifier
-                            .weight(0.5f)
+                            .weight(0.45f)
                             .fillMaxWidth(),
                     ) {
-                        items(plan.candidates.take(5)) { shot ->
-                            ShotRow(shot)
+                        items(plan.candidates.take(8), key = { it.targetBall.centerX.toLong() * 1000 + it.pocket.x.toLong() }) { shot ->
+                            ShotRow(
+                                shot = shot,
+                                isSelected = shot == best,
+                                onClick = { selectedShot = shot },
+                            )
                         }
                     }
 
@@ -125,33 +135,44 @@ fun ShotPlanScreen(
 }
 
 @Composable
-private fun ShotRow(shot: ShotCandidate) {
+private fun ShotRow(
+    shot: ShotCandidate,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
         ),
     ) {
-        androidx.compose.foundation.layout.Row(
+        Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "جيب ${"%.0f".format(shot.pocket.x)} — كرة عند (${shot.targetBall.centerX.toInt()}, ${shot.targetBall.centerY.toInt()})",
+                    text = "كرة (${shot.targetBall.centerX.toInt()}, ${shot.targetBall.centerY.toInt()}) → جيب (${shot.pocket.x.toInt()}, ${shot.pocket.y.toInt()})",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 val blocked = shot.blockersOnCuePath.size + shot.blockersOnTargetPath.size
                 if (blocked > 0) {
                     Text(
-                        text = "مُعاق: مسدود بـ $blocked كرة",
+                        text = "مسدودة بـ $blocked كرة",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
             AssistChip(
-                onClick = {},
+                onClick = onClick,
                 label = { Text(difficultyLabel(shot.difficulty)) },
             )
         }
@@ -166,13 +187,14 @@ private fun difficultyLabel(d: Difficulty): String = when (d) {
 }
 
 /**
- * Draws the aim line: cue -> ghost point, target -> pocket (straight
- * projection in warped space re-mapped through the same bilinear
- * projection used for the ball overlay).
+ * AimBoard overlay: cue -> ghost line, ghost marker, target -> pocket
+ * line, pocket ring. Coordinates re-projected from warped space via the
+ * same bilinear mapping used by the ball overlay (must stay in sync with
+ * BallDetector's WARP_WIDTH = 800).
  */
 @Composable
 private fun AimOverlay(
-    imageUri: String,
+    imageUri: Uri,
     table: TableModel,
     shot: ShotCandidate,
     cueBall: BallModel,
@@ -183,9 +205,7 @@ private fun AimOverlay(
 
     Box(modifier = modifier.onSizeChanged { canvas = it }) {
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(URLDecoder.decode(imageUri, "UTF-8"))
-                .build(),
+            model = ImageRequest.Builder(LocalContext.current).data(imageUri).build(),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             onState = { st ->
@@ -217,13 +237,10 @@ private fun AimOverlay(
             val br = toScreen(table.corners[2].first / image.width, table.corners[2].second / image.height)
             val bl = toScreen(table.corners[3].first / image.width, table.corners[3].second / image.height)
 
-            // Warp dims must match BallDetector/ShotPlanViewModel (WARP_WIDTH = 800).
             val warpW = 800f
-            val warpH = (warpW * kotlin.math.hypot(
-                (bl.x - tl.x).toDouble(), (bl.y - tl.y).toDouble(),
-            ).toFloat() / kotlin.math.hypot(
-                (tr.x - tl.x).toDouble(), (tr.y - tl.y).toDouble(),
-            ).toFloat()).coerceAtLeast(1f)
+            val topLen = kotlin.math.hypot((tr.x - tl.x).toDouble(), (tr.y - tl.y).toDouble()).toFloat()
+            val leftLen = kotlin.math.hypot((bl.x - tl.x).toDouble(), (bl.y - tl.y).toDouble()).toFloat()
+            val warpH = if (topLen > 0f) warpW * (leftLen / topLen) else 400f
 
             fun project(wx: Float, wy: Float): Offset {
                 val u = wx / warpW
@@ -240,24 +257,20 @@ private fun AimOverlay(
             val targetP = project(shot.targetBall.centerX, shot.targetBall.centerY)
             val pocketP = project(shot.pocket.x, shot.pocket.y)
 
-            // Cue line (dashed via short segments).
             val cuePath = Path().apply {
                 moveTo(cueP.x, cueP.y)
                 lineTo(ghostP.x, ghostP.y)
             }
             drawPath(cuePath, color = AIM_COLOR, style = Stroke(width = 5f))
 
-            // Ghost contact marker.
             drawCircle(color = GHOST_COLOR, radius = 10f, center = ghostP, style = Stroke(width = 4f))
 
-            // Target -> pocket line.
             val targetPath = Path().apply {
                 moveTo(targetP.x, targetP.y)
                 lineTo(pocketP.x, pocketP.y)
             }
             drawPath(targetPath, color = AIM_COLOR, style = Stroke(width = 5f))
 
-            // Pocket marker.
             drawCircle(color = GHOST_COLOR, radius = 14f, center = pocketP, style = Stroke(width = 4f))
         }
     }
