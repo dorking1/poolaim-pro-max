@@ -20,12 +20,14 @@ import com.poolaim.promax.ui.imageimport.ImageImportPlaceholder
 import com.poolaim.promax.ui.imageimport.ImageImportViewModel
 import com.poolaim.promax.ui.playergroup.PlayerGroupScreen
 import com.poolaim.promax.ui.playergroup.PlayerGroupViewModel
+import com.poolaim.promax.ui.shotplan.ShotPlanScreen
+import com.poolaim.promax.ui.shotplan.ShotPlanViewModel
 import com.poolaim.promax.ui.tabledetect.TableDetectScreen
 import com.poolaim.promax.ui.tabledetect.TableDetectViewModel
 
 /**
- * Navigation flow Phases A–C:
- * PlayerGroup -> ImageImport -> TableDetect -> BallDetect -> (Phase D onwards)
+ * Navigation flow Phases A-D:
+ * PlayerGroup -> ImageImport -> TableDetect -> BallDetect -> ShotPlan -> done
  */
 @Composable
 fun PoolAimNavHost(activity: Activity) {
@@ -39,9 +41,8 @@ fun PoolAimNavHost(activity: Activity) {
     val playerGroupViewModel = remember { PlayerGroupViewModel(settingsRepository) }
     val imageImportViewModel = remember { ImageImportViewModel(context.applicationContext) }
     val tableDetectViewModel = remember { TableDetectViewModel(tableDetector) }
+    val shotPlanViewModel = remember { ShotPlanViewModel() }
 
-    // Latest confirmed table + player group are needed to build the
-    // BallDetectViewModel when entering that destination.
     val savedGroup by playerGroupViewModel.selectedGroup.collectAsState()
 
     NavHost(navController = navController, startDestination = "player_group") {
@@ -76,6 +77,7 @@ fun PoolAimNavHost(activity: Activity) {
             TableDetectScreen(
                 viewModel = tableDetectViewModel,
                 onConfirmed = { table ->
+                    tableDetectViewModel.confirmTable(table)
                     val encoded = java.net.URLEncoder.encode(uri, "UTF-8")
                     navController.navigate("ball_detect/$encoded")
                 },
@@ -87,7 +89,6 @@ fun PoolAimNavHost(activity: Activity) {
                 java.net.URLDecoder.decode(it, "UTF-8")
             } ?: return@composable
 
-            // Build the ViewModel with the confirmed table and group.
             val table = tableDetectViewModel.currentTable() ?: return@composable
             val group = savedGroup ?: PlayerGroup.SOLIDS
 
@@ -102,12 +103,39 @@ fun PoolAimNavHost(activity: Activity) {
             BallDetectScreen(
                 viewModel = ballDetectViewModel,
                 onConfirmed = {
-                    // Phase D (physics & shot calculation) is next.
-                    activity.finish()
+                    val detection = ballDetectViewModel.latestDetection()
+                    if (detection != null) {
+                        val (table, balls, cue) = detection
+                        shotPlanViewModel.compute(
+                            cueBall = cue,
+                            playerBalls = ballDetectViewModel
+                                .state.value
+                                .let { s -> (s as? BallDetectViewModel.UiState.Success)?.playerBalls ?: emptyList() },
+                            allBalls = balls,
+                            table = table,
+                        )
+                        navController.navigate("shot_plan/$uri")
+                    }
                 },
                 onRetry = {
                     ballDetectViewModel.detect(android.net.Uri.parse(uri), table)
                 },
+            )
+        }
+
+        composable("shot_plan/{uri}") { entry ->
+            val uri = entry.arguments?.getString("uri")?.let {
+                java.net.URLDecoder.decode(it, "UTF-8")
+            } ?: return@composable
+
+            val detection = ballDetectLatest ?: return@composable
+
+            ShotPlanScreen(
+                viewModel = shotPlanViewModel,
+                imageUri = uri,
+                table = detection.first,
+                allBalls = detection.second,
+                onFinished = { activity.finish() },
             )
         }
     }
