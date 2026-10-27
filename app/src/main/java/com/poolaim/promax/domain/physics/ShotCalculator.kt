@@ -192,6 +192,6 @@ class ShotCalculator {
         return if (radii.isEmpty()) 10f else radii[radii.size / 2]
     }
 
-    private operator fun List<BallModel>.minus(vararg exclude: BallModel): List<BallModel> =
-        this.filterNot { it === exclude[0] || (exclude.size > 1 && it === exclude[1]) }
+    private operator fun List<BallModel>.minus(exclude: BallModel): List<BallModel> =
+        this.filterNot { it === exclude }
 }

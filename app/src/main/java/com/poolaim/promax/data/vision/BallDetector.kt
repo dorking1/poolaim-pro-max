@@ -86,12 +86,12 @@ class BallDetector(context: Context) {
 
         Imgproc.HoughCircles(
             gray, circles, Imgproc.HOUGH_GRADIENT,
-            dp = 1.0,
-            minDist = minR * 2.0,
-            param1 = 120.0,
-            param2 = 35.0,
-            minRadius = minR,
-            maxRadius = maxR,
+            1.0,
+            minR * 2.0,
+            120.0,
+            35.0,
+            minR,
+            maxR,
         )
 
         if (circles.cols() == 0) {

@@ -136,7 +136,7 @@ fun PoolAimNavHost(activity: Activity) {
                             allBalls = success.allBalls,
                             table = success.table,
                         )
-                        navController.navigate("shot_plan/$uri")
+                        navController.navigate("shot_plan/${java.net.URLEncoder.encode(uri, "UTF-8")}")
                     }
                 },
                 onRetry = {

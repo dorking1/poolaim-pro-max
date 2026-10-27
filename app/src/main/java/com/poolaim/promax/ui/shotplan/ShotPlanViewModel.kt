@@ -52,7 +52,7 @@ class ShotPlanViewModel(
             val plan = withContext(Dispatchers.Default) {
                 val geometry = TableGeometry(
                     width = 800f,
-                    height = table.warpHeight(table),
+                    height = warpHeight(table),
                 )
                 calculator.calculateShots(
                     cueBall = cueBall,
@@ -66,7 +66,7 @@ class ShotPlanViewModel(
     }
 
     /** Warped-space table height estimated from the confirmed quad aspect. */
-    private fun table.warpHeight(table: TableModel): Float {
+    private fun warpHeight(table: TableModel): Float {
         val tl = table.corners[0]
         val tr = table.corners[1]
         val bl = table.corners[3]
