@@ -18,9 +18,9 @@ class ShotCalculatorTest {
         BallModel(number = null, centerX = x, centerY = y, radius = r, type = type)
 
     @Test
-    fun `straight shot to corner pocket scores highest`() {
-        val cue = ball(100f, 200f, type = BallModel.Type.CUE)
-        val target = ball(300f, 200f)
+    fun `straight shot to side pocket scores highest`() {
+        val cue = ball(400f, 200f, type = BallModel.Type.CUE)
+        val target = ball(400f, 100f)
 
         val plan = ShotCalculator().calculateShots(
             cueBall = cue,
@@ -33,17 +33,18 @@ class ShotCalculatorTest {
         val best = plan.bestShot
         assertNotNull(best)
 
-        // Straight line cue -> target -> pocket(0,200): near-zero cut angle.
-        assertTrue("cut angle should be small, was ${best!!.cutAngleDeg}", best.cutAngleDeg < 5f)
+        // Straight line cue -> target -> the actual side pocket at (400, 0).
+        assertEquals(Vec2(400f, 0f), best!!.pocket)
+        assertEquals(0f, best.cutAngleDeg, 1e-4f)
         assertTrue("straight shot should be EASY", best.difficulty == Difficulty.EASY)
         assertEquals(ShotKind.DIRECT, best.kind)
     }
 
     @Test
     fun `blocked path is heavily penalized`() {
-        val cue = ball(100f, 200f, type = BallModel.Type.CUE)
-        val target = ball(300f, 200f)
-        val blocker = ball(200f, 200f) // directly between cue and target
+        val cue = ball(400f, 300f, type = BallModel.Type.CUE)
+        val target = ball(400f, 150f)
+        val blocker = ball(400f, 220f) // directly between cue and target
 
         val plan = ShotCalculator().calculateShots(
             cueBall = cue,
@@ -52,21 +53,17 @@ class ShotCalculatorTest {
             geometry = geometry,
         )
 
-        assertTrue("plan may contain blocked candidates", true)
-        // Either all blocked, or a different pocket line is better.
-        val best = plan.bestShot
-        if (best != null) {
-            val blocked = best.blockersOnCuePath.isNotEmpty() || best.blockersOnTargetPath.isNotEmpty()
-            if (blocked) {
-                assertTrue("blocked best must score low", best.fitScore < 0.35f)
-            }
-        }
+        // Check the obstructed pocket explicitly rather than accepting an empty plan.
+        val blockedShot = plan.candidates.single { it.pocket == Vec2(400f, 0f) }
+        assertEquals(listOf(blocker), blockedShot.blockersOnCuePath)
+        assertTrue(blockedShot.blockersOnTargetPath.isEmpty())
+        assertTrue("blocked shot must score low", blockedShot.fitScore < 0.15f)
     }
 
     @Test
     fun `ghost point sits one ball diameter beyond target center`() {
-        val cue = ball(100f, 100f, type = BallModel.Type.CUE)
-        val target = ball(500f, 100f) // straight line to pocket (800,100)
+        val cue = ball(400f, 300f, type = BallModel.Type.CUE)
+        val target = ball(400f, 150f) // straight line to the side pocket (400, 0)
         val r = 10f
 
         val plan = ShotCalculator().calculateShots(
@@ -79,10 +76,10 @@ class ShotCalculatorTest {
         val best = plan.bestShot!!
         val pocketDist = best.targetTravel
         assertTrue(pocketDist > 0f)
-        // Ghost point x: target center - direction * 2r; pocket is at +x,
-        // direction is +x, so ghost x = 500 - 20 = 480.
-        assertEquals(480f, best.ghostPoint.x, 1f)
-        assertEquals(100f, best.ghostPoint.y, 1f)
+        // The pocket direction is -y, so the ghost sits 2r below the target.
+        assertEquals(Vec2(400f, 0f), best.pocket)
+        assertEquals(400f, best.ghostPoint.x, 1e-4f)
+        assertEquals(target.centerY + 2f * r, best.ghostPoint.y, 1e-4f)
     }
 
     @Test
