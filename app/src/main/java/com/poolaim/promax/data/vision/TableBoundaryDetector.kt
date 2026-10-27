@@ -1,14 +1,14 @@
 package com.poolaim.promax.data.vision
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.net.Uri
-import android.content.Context
 import com.poolaim.promax.domain.model.TableModel
 import org.opencv.android.OpenCVLoader
+import org.opencv.android.Utils
 import org.opencv.core.Core
-import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
@@ -16,39 +16,36 @@ import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
-import kotlin.math.abs
-import kotlin.math.hypot
 
 /**
  * Detects the pool table boundary (green felt region) in a captured photo.
  *
- * Strategy:
- * 1. Downscale for speed, blur to suppress noise.
- * 2. HSV threshold on "green felt" hue range.
- * 3. Morphological close to merge the felt into one blob.
- * 4. Find the largest contour; require it to cover >= [MIN_AREA_FRACTION]
- *    of the image, otherwise report failure so the UI can offer manual
- *    calibration.
- * 5. Fit a rotated rect around the blob and derive the four corners in
- *    original-image pixel coordinates.
+ * Pipeline:
+ * 1. Decode downscaled, convert to OpenCV Mat via [Utils.bitmapToMat] (BGRA).
+ * 2. HSV threshold on the "green felt" hue range.
+ * 3. Morphological close/open to merge the felt into one blob.
+ * 4. Find the largest contour; require >= [MIN_AREA_FRACTION] of the image,
+ *    otherwise report failure so the UI can offer manual calibration.
+ * 5. Fit a min-area rect, extract and order the four corners, map back to
+ *    original-image coordinates.
  */
-class TableBoundaryDetector(private val context: Context) {
+class TableBoundaryDetector(context: Context) {
+
+    private val appContext = context.applicationContext
 
     init {
-        // Loads the native library once; safe to call repeatedly.
         OpenCVLoader.initLocal()
     }
 
     companion object {
-        private const val MIN_AREA_FRACTION = 0.08  // felt must span >= 8% of photo
-        private const val WORK_SIZE = 640.0         // working resolution for analysis
-        private const val GREEN_HUE_LOW = 35.0      // HSV H range (OpenCV: 0-180)
+        private const val MIN_AREA_FRACTION = 0.08  // felt spans >= 8% of the photo
+        private const val WORK_WIDTH = 640            // working resolution for analysis
+        private const val GREEN_HUE_LOW = 35.0       // OpenCV HSV H range: 0–180
         private const val GREEN_HUE_HIGH = 85.0
         private const val GREEN_SAT_MIN = 40.0
         private const val GREEN_VAL_MIN = 40.0
     }
 
-    /** Result of table detection. */
     sealed interface DetectionResult {
         data class Success(val table: TableModel) : DetectionResult
         data object Failure : DetectionResult
@@ -56,32 +53,13 @@ class TableBoundaryDetector(private val context: Context) {
 
     fun detect(uri: Uri): DetectionResult {
         val bitmap = decodeScaled(uri) ?: return DetectionResult.Failure
-        val scale = bitmap.width / WORK_SIZE
-        val work = Bitmap.createScaledBitmap(
-            bitmap,
-            WORK_SIZE.toInt(),
-            (bitmap.height / scale).toInt().coerceAtLeast(1),
-            true,
-        )
+        val work = scaleToWorkWidth(bitmap)
 
-        val mat = Mat().also {
-            val px = IntArray(work.width * work.height)
-            work.getPixels(px, 0, work.width, 0, 0, work.width, work.height)
-            it.put(0, 0, px.toIntArray().map { v ->
-                byteArrayOf(
-                    (v and 0xFF).toByte(),
-                    ((v shr 8) and 0xFF).toByte(),
-                    ((v shr 16) and 0xFF).toByte(),
-                )
-            }.fold(byteArrayOf()) { acc, b -> acc + b })
-        }
-
-        // --- Pipeline ---
-        val blurred = Mat()
-        Imgproc.GaussianBlur(mat, blurred, Size(9.0, 9.0), 0.0)
+        val rgba = Mat()
+        Utils.bitmapToMat(work, rgba)
 
         val hsv = Mat()
-        Imgproc.cvtColor(blurred, hsv, Imgproc.COLOR_RGB2HSV)
+        Imgproc.cvtColor(rgba, hsv, Imgproc.COLOR_BGR2HSV)
 
         val mask = Mat()
         Core.inRange(
@@ -99,24 +77,37 @@ class TableBoundaryDetector(private val context: Context) {
         Imgproc.findContours(
             mask, contours, Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE,
         )
-        if (contours.isEmpty()) return DetectionResult.Failure
-
-        val largest = contours.maxByOrNull { Imgproc.contourArea(it) } ?: return DetectionResult.Failure
-        val areaFraction = Imgproc.contourArea(largest) / (work.width() * work.height()).toDouble()
-        if (areaFraction < MIN_AREA_FRACTION) return DetectionResult.Failure
-
-        val rect = Imgproc.minAreaRect(MatOfPoint2f(*largest.toArray()))
-        val corners2f = arrayOfNulls<Point>(4)
-        val points = Mat()
-        Imgproc.boxPoints(rect, points)
-        for (i in 0 until 4) {
-            val p = Point(points.get(i, 0)[0] * scale, points.get(i, 1)[0] * scale)
-            corners2f[i] = p
+        if (contours.isEmpty()) {
+            release(rgba, hsv, mask)
+            return DetectionResult.Failure
         }
 
-        // Order corners: TL, TR, BR, BL (independent of rotation)
-        val ordered = orderCorners(listOfNotNull(*corners2f))
+        val largest = contours.maxByOrNull { Imgproc.contourArea(it) }
+        if (largest == null) {
+            release(rgba, hsv, mask)
+            return DetectionResult.Failure
+        }
 
+        val blobArea = Imgproc.contourArea(largest)
+        val imageArea = work.width * work.height.toDouble()
+        if (blobArea / imageArea < MIN_AREA_FRACTION) {
+            release(rgba, hsv, mask)
+            return DetectionResult.Failure
+        }
+
+        val scale = bitmap.width.toDouble() / work.width
+
+        val rect = Imgproc.minAreaRect(MatOfPoint2f(*largest.toArray()))
+        val boxPoints = Mat()
+        Imgproc.boxPoints(rect, boxPoints)
+
+        val corners = (0 until 4).map { i ->
+            val x = boxPoints.get(i, 0)[0] * scale
+            val y = boxPoints.get(i, 1)[0] * scale
+            Point(x, y)
+        }
+
+        val ordered = orderCorners(corners)
         val bounds = RectF(
             ordered.minOf { it.first },
             ordered.minOf { it.second },
@@ -124,9 +115,11 @@ class TableBoundaryDetector(private val context: Context) {
             ordered.maxOf { it.second },
         )
 
-        // Confidence: how rectangular the blob is (area ratio of blob vs fitted rect)
-        val rectArea = rect.size.area()
-        val confidence = (Imgproc.contourArea(largest) / rectArea).toFloat().coerceIn(0f, 1f)
+        // Confidence: how rectangular the blob is (blob area vs fitted rect area).
+        val rectArea = rect.size.area().coerceAtLeast(1.0)
+        val confidence = (blobArea / rectArea).toFloat().coerceIn(0f, 1f)
+
+        release(rgba, hsv, mask)
 
         return DetectionResult.Success(
             TableModel(
@@ -141,32 +134,43 @@ class TableBoundaryDetector(private val context: Context) {
     // ---- helpers ----
 
     private fun orderCorners(points: List<Point>): List<Pair<Float, Float>> {
-        val sum = points.map { it.x + it.y }
-        val diff = points.map { it.y - it.x }
+        val sums = points.map { it.x + it.y }
+        val diffs = points.map { it.y - it.x }
 
-        val tl = points[sum.indexOf(sum.min())]
-        val br = points[sum.indexOf(sum.max())]
-        val tr = points[diff.indexOf(diff.min())]
-        val bl = points[diff.indexOf(diff.max())]
+        val tl = points[sums.indexOf(sums.min())]
+        val br = points[sums.indexOf(sums.max())]
+        val tr = points[diffs.indexOf(diffs.min())]
+        val bl = points[diffs.indexOf(diffs.max())]
 
         return listOf(
-            Pair(tl.x.toFloat(), tl.y.toFloat()),
-            Pair(tr.x.toFloat(), tr.y.toFloat()),
-            Pair(br.x.toFloat(), br.y.toFloat()),
-            Pair(bl.x.toFloat(), bl.y.toFloat()),
+            tl.x.toFloat() to tl.y.toFloat(),
+            tr.x.toFloat() to tr.y.toFloat(),
+            br.x.toFloat() to br.y.toFloat(),
+            bl.x.toFloat() to bl.y.toFloat(),
         )
     }
 
     private fun decodeScaled(uri: Uri): Bitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use {
+        appContext.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, bounds)
         }
-        val opts = BitmapFactory.Options().apply {
-            inSampleSize = 2  // full resolution not needed for boundary detection
-        }
-        context.contentResolver.openInputStream(uri)?.use {
+        val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+        appContext.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, opts)
         }
     }.getOrNull()
+
+    private fun scaleToWorkWidth(src: Bitmap): Bitmap {
+        if (src.width <= WORK_WIDTH) return src
+        val ratio = WORK_WIDTH.toDouble() / src.width
+        return Bitmap.createScaledBitmap(
+            src,
+            WORK_WIDTH,
+            (src.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        )
+    }
+
+    private fun release(vararg mats: Mat) = mats.forEach { it.release() }
 }
