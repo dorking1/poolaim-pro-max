@@ -1,0 +1,34 @@
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Java/Kotlin class files
+*.class
+bin/
+gen/
+out/
+build/
+.gradle/
+
+# Local configuration
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Native libs
+app/src/main/jniLibs/
