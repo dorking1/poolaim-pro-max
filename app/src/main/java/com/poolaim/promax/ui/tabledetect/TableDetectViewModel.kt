@@ -29,6 +29,19 @@ class TableDetectViewModel(
     private val _state = MutableStateFlow<UiState>(UiState.Idle)
     val state: StateFlow<UiState> = _state
 
+    /** Last table confirmed by the user (auto or manual) — for downstream phases. */
+    private val _confirmedTable = MutableStateFlow<TableModel?>(null)
+
+    /**
+     * Returns the currently confirmed table geometry, or the table from the
+     * latest Success state if not yet explicitly confirmed. Null when no
+     * table is available yet.
+     */
+    fun currentTable(): TableModel? {
+        _confirmedTable.value?.let { return it }
+        return (state.value as? UiState.Success)?.table
+    }
+
     fun analyze(uri: Uri) {
         _state.value = UiState.Analyzing(uri)
 
@@ -52,6 +65,11 @@ class TableDetectViewModel(
         }
     }
 
+    /** Marks the given table as confirmed (called on user confirmation). */
+    fun confirmTable(table: TableModel) {
+        _confirmedTable.value = table
+    }
+
     fun updateManualCorner(index: Int, x: Float, y: Float) {
         val current = _state.value as? UiState.ManualCalibration ?: return
         val newCorners = current.corners.toMutableList().apply {
@@ -68,12 +86,14 @@ class TableDetectViewModel(
             current.corners.maxOf { it.first },
             current.corners.maxOf { it.second },
         )
-        return TableModel(
+        val table = TableModel(
             bounds = bounds,
             corners = current.corners,
             confidence = 1f,           // user-confirmed geometry is authoritative
             manuallyCalibrated = true,
         )
+        _confirmedTable.value = table
+        return table
     }
 
     /** Slightly inset corners as a sensible manual starting point. */
