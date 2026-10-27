@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">PoolAim Pro Max</string>
+
+    <!-- Common -->
+    <string name="action_next">التالي</string>
+    <string name="action_back">رجوع</string>
+    <string name="action_done">تم</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_import_image">استيراد صورة الطاولة</string>
+
+    <!-- Player group selection -->
+    <string name="player_group_title">اختر مجموعة اللعب</string>
+    <string name="player_group_subtitle">حدد نوع الطاولة ومجموعة الكرات المستخدمة</string>
+    <string name="player_group_solid">المصمتة (1–7)</string>
+    <string name="player_group_stripes">المخططة (9–15)</string>
+    <string name="player_group_eight_ball">كرة 8 فقط</string>
+    <string name="player_group_custom">مجموعة مخصصة</string>
+    <string name="player_group_confirm">تأكيد المجموعة</string>
+
+    <!-- Image import -->
+    <string name="image_import_hint">التقط صورة للطاولة من الأعلى بزاوية 45–60 درجة</string>
+    <string name="image_import_pick_photo">اختيار صورة من المعرض</string>
+    <string name="image_import_take_photo">التقاط صورة</string>
+    <string name="image_import_error_unsupported">الصورة غير مدعومة أو غير صالحة</string>
+    <string name="image_import_error_permission">لا يمكن الوصول إلى الصورة المحددة</string>
+
+    <!-- Table detection -->
+    <string name="table_detect_title">تحليل الطاولة</string>
+    <string name="table_detect_searching">جارٍ البحث عن حدود الطاولة…</string>
+    <string name="table_detect_manual_fallback">فشل الكشف التلقائي — استخدم المعايرة اليدوية</string>
+    <string name="table_detect_confirm">تأكيد الحدود</string>
+</resources>
