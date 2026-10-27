@@ -1,13 +1,13 @@
 package com.poolaim.promax.ui.tabledetect
 
-import android.net.Uri
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -36,20 +37,12 @@ import coil.request.ImageRequest
 import com.poolaim.promax.R
 import com.poolaim.promax.domain.model.TableModel
 
-/**
- * Coordinate space of the corner list passed to [ImageWithOverlay].
- * PIXEL: original-image pixels (OpenCV detector output).
- * NORMALIZED: 0..1 fractions of the displayed image (manual calibration).
- */
+/** Coordinate space of the corner list. */
 enum class CornerSpace { PIXEL, NORMALIZED }
 
 /**
- * Table detection screen: shows the imported image, automatic detection
- * result overlay, and manual corner calibration when auto mode fails.
- *
- * The overlay maps corner coordinates into the ContentScale.Fit displayed
- * rect so the drawn quadrilateral lines up with the visible table even when
- * the image is letterboxed.
+ * Table detection screen with REAL manual calibration: draggable corner
+ * handles when auto-detection fails, and fitted overlay for auto results.
  */
 @Composable
 fun TableDetectScreen(
@@ -90,10 +83,9 @@ fun TableDetectScreen(
             }
 
             is TableDetectViewModel.UiState.Success -> {
-                ImageWithOverlay(
+                AutoDetectOverlay(
                     imageUri = s.imageUri,
                     corners = s.table.corners,
-                    cornerSpace = CornerSpace.PIXEL,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
@@ -107,10 +99,10 @@ fun TableDetectScreen(
             }
 
             is TableDetectViewModel.UiState.ManualCalibration -> {
-                ImageWithOverlay(
+                ManualCalibrationOverlay(
                     imageUri = s.imageUri,
                     corners = s.corners,
-                    cornerSpace = CornerSpace.NORMALIZED,
+                    onCornerDrag = viewModel::updateManualCorner,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
@@ -133,24 +125,20 @@ fun TableDetectScreen(
 }
 
 /**
- * Image with a quadrilateral overlay drawn over the fitted (ContentScale.Fit)
- * area. Pixel-space corners are normalized using the intrinsic image size
- * reported by the Coil painter state.
+ * Auto-detection result overlay: pixel-space corners mapped onto the
+ * ContentScale.Fit displayed rect using the Coil painter intrinsic size.
  */
 @Composable
-private fun ImageWithOverlay(
-    imageUri: Uri,
+private fun AutoDetectOverlay(
+    imageUri: android.net.Uri,
     corners: List<Pair<Float, Float>>,
-    cornerSpace: CornerSpace,
     modifier: Modifier = Modifier,
 ) {
     var intrinsicSize by remember { mutableStateOf<IntSize?>(null) }
 
     Box(modifier = modifier) {
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(imageUri)
-                .build(),
+            model = ImageRequest.Builder(LocalContext.current).data(imageUri).build(),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             onState = { painterState ->
@@ -166,35 +154,114 @@ private fun ImageWithOverlay(
             val image = intrinsicSize ?: return@Canvas
             if (corners.size < 4) return@Canvas
 
-            val normalized: List<Pair<Float, Float>> = when (cornerSpace) {
-                CornerSpace.PIXEL -> corners.map { (x, y) ->
-                    (x / image.width).coerceIn(0f, 1f) to (y / image.height).coerceIn(0f, 1f)
-                }
-                CornerSpace.NORMALIZED -> corners
+            val normalized = corners.map { (x, y) ->
+                (x / image.width).coerceIn(0f, 1f) to (y / image.height).coerceIn(0f, 1f)
             }
-
-            // ContentScale.Fit: compute the displayed rect inside the canvas.
-            val fitScale = minOf(
-                size.width.toFloat() / image.width,
-                size.height.toFloat() / image.height,
-            )
-            val drawWidth = image.width * fitScale
-            val drawHeight = image.height * fitScale
-            val offsetX = (size.width - drawWidth) / 2f
-            val offsetY = (size.height - drawHeight) / 2f
-
-            val points = normalized.map { (nx, ny) ->
-                Offset(offsetX + nx * drawWidth, offsetY + ny * drawHeight)
-            }
-
-            val path = Path().apply {
-                moveTo(points[0].x, points[0].y)
-                lineTo(points[1].x, points[1].y)
-                lineTo(points[2].x, points[2].y)
-                lineTo(points[3].x, points[3].y)
-                close()
-            }
-            drawPath(path, color = Color(0xFF4CAF50), style = Stroke(width = 6f))
+            val rect = fitRect(size.width, size.height, image)
+            drawQuad(normalized, rect, Color(0xFF4CAF50))
         }
     }
 }
+
+/**
+ * Manual calibration overlay: normalized corners (0..1 of the DISPLAYED
+ * image rect) with draggable handles. Dragging maps screen pixels back to
+ * normalized coordinates and reports via [onCornerDrag].
+ */
+@Composable
+private fun ManualCalibrationOverlay(
+    imageUri: android.net.Uri,
+    corners: List<Pair<Float, Float>>,
+    onCornerDrag: (index: Int, x: Float, y: Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var intrinsicSize by remember { mutableStateOf<IntSize?>(null) }
+    var canvasSize by remember { mutableStateOf(IntSize(1, 1)) }
+    var activeCorner by remember { mutableStateOf(-1) }
+
+    Box(modifier = modifier) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current).data(imageUri).build(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            onState = { painterState ->
+                val drawable = (painterState as? AsyncImagePainter.State.Success)?.result?.drawable
+                intrinsicSize = drawable?.let {
+                    IntSize(it.intrinsicWidth.coerceAtLeast(1), it.intrinsicHeight.coerceAtLeast(1))
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChangedCompat { canvasSize = it }
+                .pointerInput(corners) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val rect = fitRect(
+                                canvasSize.width.toFloat(),
+                                canvasSize.height.toFloat(),
+                                intrinsicSize ?: return@detectDragGestures IntSize(1, 1),
+                            )
+                            // Nearest corner within a generous touch radius.
+                            activeCorner = corners.indices.minByOrNull { i ->
+                                val cx = rect.left + corners[i].first * rect.width
+                                val cy = rect.top + corners[i].second * rect.height
+                                (offset - Offset(cx, cy)).getDistanceSquared()
+                            } ?: -1
+                        },
+                        onDrag = { change, amount ->
+                            if (activeCorner >= 0) {
+                                val rect = fitRect(
+                                    canvasSize.width.toFloat(),
+                                    canvasSize.height.toFloat(),
+                                    intrinsicSize ?: return@detectDragGestures,
+                                )
+                                val cx = rect.left + corners[activeCorner].first * rect.width
+                                val cy = rect.top + corners[activeCorner].second * rect.height
+                                val nx = ((cx + amount.x - rect.left) / rect.width).coerceIn(0f, 1f)
+                                val ny = ((cy + amount.y - rect.top) / rect.height).coerceIn(0f, 1f)
+                                onCornerDrag(activeCorner, nx, ny)
+                                change.consume()
+                            }
+                        },
+                        onDragEnd = { activeCorner = -1 },
+                    )
+                },
+        ) {
+            if (corners.size < 4) return@Canvas
+            val rect = fitRect(size.width, size.height, intrinsicSize ?: return@Canvas)
+            drawQuad(corners, rect, Color(0xFF4CAF50))
+
+            // Draw handle circles.
+            corners.forEach { (nx, ny) ->
+                drawCircle(
+                    color = Color(0xFF4CAF50),
+                    radius = 18f,
+                    center = Offset(rect.left + nx * rect.width, rect.top + ny * rect.height),
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 8f,
+                    center = Offset(rect.left + nx * rect.width, rect.top + ny * rect.height),
+                )
+            }
+        }
+    }
+}
+
+/** ContentScale.Fit rect of the image inside a (w x h) canvas. */
+private fun fitRect(w: Float, h: Float, image: IntSize): androidx.compose.ui.geometry.Rect {
+    val scale = minOf(w / image.width, h / image.height)
+    val drawW = image.width * scale
+    rectHeight@ return androidx.compose.ui.geometry.Rect(
+        left = (w - drawW) / 2f,
+        top = (h - image.height * scale) / 2f,
+        right = (w - drawW) / 2f + drawW,
+        bottom = (h - image.height * scale) / 2f + image.height * scale,
+    )
+}
+
+private fun androidx.compose.foundation.CanvasModifier... placeholder
