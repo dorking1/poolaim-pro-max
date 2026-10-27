@@ -59,6 +59,12 @@ dependencies {
     annotationProcessor(libs.androidx.room.compiler)
     implementation(libs.kotlinx.coroutines.android)
 
+    // OpenCV for table & ball detection (Phase B/C)
+    implementation(libs.opencv.android)
+
+    // Coil for loading URIs into Compose
+    implementation(libs.coil.compose)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
