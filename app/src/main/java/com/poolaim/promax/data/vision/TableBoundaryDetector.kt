@@ -18,16 +18,21 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 /**
- * Detects the pool table boundary (green felt region) in a captured photo.
+ * Detects the pool table boundary (felt region) in a captured photo.
  *
  * Pipeline:
  * 1. Decode downscaled, convert to OpenCV Mat via [Utils.bitmapToMat] (BGRA).
- * 2. HSV threshold on the "green felt" hue range.
+ * 2. HSV threshold on the felt hue range. Covers BOTH green felt (H 35-85)
+ *    and blue/cyan felt (H 85-105, e.g. 8 Ball Pool style tables).
  * 3. Morphological close/open to merge the felt into one blob.
  * 4. Find the largest contour; require >= [MIN_AREA_FRACTION] of the image,
  *    otherwise report failure so the UI can offer manual calibration.
  * 5. Fit a min-area rect, extract and order the four corners, map back to
  *    original-image coordinates.
+ *
+ * Limitations (manual calibration fallback exists for these):
+ * - Very dark or unusual felt colors fall outside the hue window.
+ * - Dark cushions adjacent to bright felt may be merged into the blob.
  */
 class TableBoundaryDetector(context: Context) {
 
@@ -39,11 +44,11 @@ class TableBoundaryDetector(context: Context) {
 
     companion object {
         private const val MIN_AREA_FRACTION = 0.08  // felt spans >= 8% of the photo
-        private const val WORK_WIDTH = 640            // working resolution for analysis
-        private const val GREEN_HUE_LOW = 35.0       // OpenCV HSV H range: 0–180
-        private const val GREEN_HUE_HIGH = 85.0
-        private const val GREEN_SAT_MIN = 40.0
-        private const val GREEN_VAL_MIN = 40.0
+        private const val WORK_WIDTH = 640          // working resolution for analysis
+        private const val FELT_HUE_LOW = 35.0      // OpenCV HSV H range: 0-180
+        private const val FELT_HUE_HIGH = 105.0     // green through cyan-blue
+        private const val FELT_SAT_MIN = 40.0
+        private const val FELT_VAL_MIN = 90.0       // skip dark cushions
     }
 
     sealed interface DetectionResult {
@@ -64,8 +69,8 @@ class TableBoundaryDetector(context: Context) {
         val mask = Mat()
         Core.inRange(
             hsv,
-            Scalar(GREEN_HUE_LOW, GREEN_SAT_MIN, GREEN_VAL_MIN),
-            Scalar(GREEN_HUE_HIGH, 255.0, 255.0),
+            Scalar(FELT_HUE_LOW, FELT_SAT_MIN, FELT_VAL_MIN),
+            Scalar(FELT_HUE_HIGH, 255.0, 255.0),
             mask,
         )
 
