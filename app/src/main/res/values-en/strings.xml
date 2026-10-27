@@ -27,4 +27,21 @@
     <string name="table_detect_confirm">Confirm boundaries</string>
     <string name="table_detect_drag_corners">Drag the four table corners to match the photo</string>
     <string name="table_detect_confidence">Confidence</string>
+
+    <string name="ball_detect_searching">Detecting balls…</string>
+    <string name="ball_detect_error">Ball detection failed — retry or use a clearer photo</string>
+    <string name="ball_detect_confirm">Confirm balls</string>
+    <string name="ball_detect_yours">Your balls</string>
+    <string name="ball_detect_opponent">Opponent balls</string>
+
+    <string name="shot_plan_title">Shot plan</string>
+    <string name="shot_plan_no_shot">No viable shot for this layout — try re-detection</string>
+    <string name="shot_plan_finish">Done — finish analysis</string>
+    <string name="shot_plan_difficulty_easy">Easy</string>
+    <string name="shot_plan_difficulty_medium">Medium</string>
+    <string name="shot_plan_difficulty_hard">Hard</string>
+    <string name="shot_plan_difficulty_very_hard">Very hard</string>
+
+    <string name="history_title">Analysis history</string>
+    <string name="history_empty">No saved analyses yet</string>
 </resources>
