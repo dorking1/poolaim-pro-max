@@ -25,4 +25,6 @@
     <string name="table_detect_searching">Searching for table boundaries…</string>
     <string name="table_detect_manual_fallback">Auto-detection failed — use manual calibration</string>
     <string name="table_detect_confirm">Confirm boundaries</string>
+    <string name="table_detect_drag_corners">Drag the four table corners to match the photo</string>
+    <string name="table_detect_confidence">Confidence</string>
 </resources>
