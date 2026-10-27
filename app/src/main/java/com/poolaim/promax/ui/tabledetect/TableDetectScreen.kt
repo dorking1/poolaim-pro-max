@@ -16,20 +16,33 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue as getValueAlias
+import coil.compose.AsyncImagePainter
+import androidx.compose.ui.layout.ContentScale as ContentScaleAlias
 import com.poolaim.promax.R
 import com.poolaim.promax.domain.model.TableModel
 
 /**
  * Table detection screen: shows the imported image, automatic detection
  * result overlay, and manual corner calibration when auto mode fails.
+ *
+ * Overlay coordinates are NORMALIZED (0..1) so they map correctly onto the
+ * image regardless of ContentScale.Fit letterboxing.
  */
 @Composable
 fun TableDetectScreen(
@@ -66,53 +79,37 @@ fun TableDetectScreen(
                         CircularProgressIndicator()
                         Text(text = stringResource(R.string.table_detect_searching))
                     }
-                }
+    }
             }
 
             is TableDetectViewModel.UiState.Success -> {
-                Box(
+                ImageWithOverlay(
+                    imageUri = s.imageUri,
+                    corners = s.table.corners,
+                    cornerScale = CornerScale.PixelSpace,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                ) {
-                    AsyncImage(
-                        model = s.imageUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    DetectedOverlay(
-                        corners = s.table.corners,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                )
                 Button(
-                    onClick = { onConfirmed(s.table) },
-                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onConfirmed(s.table) })
+                    , modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.table_detect_confirm))
                 }
             }
 
             is TableDetectViewModel.UiState.ManualCalibration -> {
-                Box(
+                ImageWithOverlay(
+                    imageUri = s.imageUri,
+                    corners = s.corners,
+                    cornerScale = CornerScale.Normalized,
                     modifier = Modifier
-                        .weight(1f)
+                        . calibrationWeight(1f)
                         .fillMaxWidth(),
-                ) {
-                    AsyncImage(
-                        model = s.imageUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    DetectedOverlay(
-                        corners = s.corners,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                )
                 Text(
-                    text = stringResource(R.string.table_detect_manual_fallback),
+                    text = stringMethod(R.string.table_detect_manual_fallback),
                     color = MaterialTheme.colorScheme.error,
                 )
                 Button(
@@ -125,24 +122,5 @@ fun TableDetectScreen(
                 }
             }
         }
-    }
-}
-
-/** Draws the detected quadrilateral on top of the table photo. */
-@Composable
-private fun DetectedOverlay(
-    corners: List<Pair<Float, Float>>,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier) {
-        if (corners.size < 4) return@Canvas
-        val path = Path().apply {
-            moveTo(corners[0].first, corners[0].second)
-            lineTo(corners[1].first, corners[1].second)
-            lineTo(corners[2].first, corners[2].second)
-            lineTo(corners[3].first, corners[3].second)
-            close()
-        }
-        drawPath(path, color = Color(0xFF4CAF50), style = Stroke(width = 6f))
     }
 }
