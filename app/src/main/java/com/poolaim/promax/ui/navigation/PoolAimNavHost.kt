@@ -7,11 +7,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.poolaim.promax.data.local.HistoryRepository
 import com.poolaim.promax.data.settings.SettingsRepository
 import com.poolaim.promax.data.vision.BallDetector
 import com.poolaim.promax.data.vision.TableBoundaryDetector
@@ -20,6 +22,8 @@ import com.poolaim.promax.domain.model.PlayerGroup
 import com.poolaim.promax.domain.model.TableModel
 import com.poolaim.promax.ui.balldetect.BallDetectScreen
 import com.poolaim.promax.ui.balldetect.BallDetectViewModel
+import com.poolaim.promax.ui.history.HistoryScreen
+import com.poolaim.promax.ui.history.HistoryViewModel
 import com.poolaim.promax.ui.imageimport.ImageImportPlaceholder
 import com.poolaim.promax.ui.imageimport.ImageImportViewModel
 import com.poolaim.promax.ui.playergroup.PlayerGroupScreen
@@ -28,13 +32,12 @@ import com.poolaim.promax.ui.shotplan.ShotPlanScreen
 import com.poolaim.promax.ui.shotplan.ShotPlanViewModel
 import com.poolaim.promax.ui.tabledetect.TableDetectScreen
 import com.poolaim.promax.ui.tabledetect.TableDetectViewModel
+import kotlinx.coroutines.launch
 
 /**
- * Navigation flow Phases A-D:
- * PlayerGroup -> ImageImport -> TableDetect -> BallDetect -> ShotPlan -> done
- *
- * Confirmed results (table geometry, detected balls, cue ball) are hoisted
- * here so later destinations can consume them without re-running detection.
+ * Navigation flow Phases A-F:
+ * PlayerGroup -> ImageImport -> TableDetect -> BallDetect -> ShotPlan
+ * History is reachable from the start screen after the group is chosen.
  */
 @Composable
 fun PoolAimNavHost(activity: Activity) {
@@ -44,19 +47,23 @@ fun PoolAimNavHost(activity: Activity) {
     val settingsRepository = remember { SettingsRepository(context) }
     val tableDetector = remember { TableBoundaryDetector(context.applicationContext) }
     val ballDetector = remember { BallDetector(context.applicationContext) }
+    val historyRepository = remember { HistoryRepository(context) }
 
     val playerGroupViewModel = remember { PlayerGroupViewModel(settingsRepository) }
     val imageImportViewModel = remember { ImageImportViewModel(context.applicationContext) }
     val tableDetectViewModel = remember { TableDetectViewModel(tableDetector) }
     val shotPlanViewModel = remember { ShotPlanViewModel() }
+    val historyViewModel = remember { HistoryViewModel(historyRepository) }
 
     val savedGroup by playerGroupViewModel.selectedGroup.collectAsState()
+    val scope = rememberCoroutineScope()
 
-    // Hoisted detection results shared between ball_detect and shot_plan.
+    // Hoisted detection results shared between destinations.
     var confirmedBalls by remember { mutableStateOf<List<BallModel>?>(null) }
     var confirmedTable by remember { mutableStateOf<TableModel?>(null) }
     var confirmedCue by remember { mutableStateOf<BallModel?>(null) }
     var confirmedPlayerBalls by remember { mutableStateOf<List<BallModel>?>(null) }
+    var currentImageUri by remember { mutableStateOf<String?>(null) }
 
     NavHost(navController = navController, startDestination = "player_group") {
         composable("player_group") {
@@ -70,6 +77,7 @@ fun PoolAimNavHost(activity: Activity) {
             ImageImportPlaceholder(
                 viewModel = imageImportViewModel,
                 onImageReady = { uri ->
+                    currentImageUri = uri.toString()
                     navController.navigate(
                         "table_detect/${java.net.URLEncoder.encode(uri.toString(), "UTF-8")}",
                     )
@@ -150,7 +158,30 @@ fun PoolAimNavHost(activity: Activity) {
                 imageUri = uri,
                 table = table,
                 allBalls = balls,
-                onFinished = { activity.finish() },
+                onFinished = {
+                    // Phase F: persist the completed analysis to history.
+                    val plan = (shotPlanViewModel.state.value as? ShotPlanViewModel.UiState.Success)?.plan
+                    val imageUriValue = currentImageUri ?: uri
+                    scope.launch {
+                        runCatching {
+                            historyRepository.save(
+                                imageUri = imageUriValue,
+                                playerGroup = (savedGroup ?: PlayerGroup.SOLIDS).name,
+                                balls = balls,
+                                table = table,
+                                bestShot = plan?.bestShot,
+                            )
+                        }
+                    }
+                    activity.finish()
+                },
+            )
+        }
+
+        composable("history") {
+            HistoryScreen(
+                viewModel = historyViewModel,
+                onOpenSession = { /* Re-open flow wired in a later refinement */ },
             )
         }
     }
