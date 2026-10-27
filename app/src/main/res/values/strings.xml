@@ -31,4 +31,6 @@
     <string name="table_detect_searching">جارٍ البحث عن حدود الطاولة…</string>
     <string name="table_detect_manual_fallback">فشل الكشف التلقائي — استخدم المعايرة اليدوية</string>
     <string name="table_detect_confirm">تأكيد الحدود</string>
+    <string name="table_detect_drag_corners">اسحب أركان الطاولة الأربعة لمطابقتها مع الصورة</string>
+    <string name="table_detect_confidence">درجة الثقة</string>
 </resources>
