@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_next">Next</string>
+    <string name="action_back">Back</string>
+    <string name="action_done">Done</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_import_image">Import table image</string>
+
+    <string name="player_group_title">Choose your playing group</string>
+    <string name="player_group_subtitle">Select the table type and ball set in use</string>
+    <string name="player_group_solid">Solids (1–7)</string>
+    <string name="player_group_stripes">Stripes (9–15)</string>
+    <string name="player_group_eight_ball">8-ball only</string>
+    <string name="player_group_custom">Custom group</string>
+    <string name="player_group_confirm">Confirm group</string>
+
+    <string name="image_import_hint">Capture the table from above at a 45–60° angle</string>
+    <string name="image_import_pick_photo">Pick from gallery</string>
+    <string name="image_import_take_photo">Take photo</string>
+    <string name="image_import_error_unsupported">Unsupported or invalid image</string>
+    <string name="image_import_error_permission">Cannot access the selected image</string>
+
+    <string name="table_detect_title">Table analysis</string>
+    <string name="table_detect_searching">Searching for table boundaries…</string>
+    <string name="table_detect_manual_fallback">Auto-detection failed — use manual calibration</string>
+    <string name="table_detect_confirm">Confirm boundaries</string>
+</resources>
