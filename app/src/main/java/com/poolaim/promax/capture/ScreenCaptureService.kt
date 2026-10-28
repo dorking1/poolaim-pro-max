@@ -46,21 +46,13 @@ class ScreenCaptureService : Service() {
     private var displayedFps = 0
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopCapture()
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        if (intent?.action == ACTION_STOP) { stopCapture(); stopSelf(); return START_NOT_STICKY }
         if (projection != null) return START_NOT_STICKY
         val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Int.MIN_VALUE)
         @Suppress("DEPRECATION")
-        val resultData = if (Build.VERSION.SDK_INT >= 33) {
-            intent?.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
-        } else intent?.getParcelableExtra(EXTRA_RESULT_DATA)
-        if (resultCode == null || resultCode == Int.MIN_VALUE || resultData == null) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        val resultData = if (Build.VERSION.SDK_INT >= 33) intent?.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
+            else intent?.getParcelableExtra(EXTRA_RESULT_DATA)
+        if (resultCode == null || resultCode == Int.MIN_VALUE || resultData == null) { stopSelf(); return START_NOT_STICKY }
         startCaptureForeground()
         return try {
             val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -70,27 +62,21 @@ class ScreenCaptureService : Service() {
         } catch (error: Exception) {
             Log.e(TAG, "Capture startup failed", error)
             publishResult(0, 0, "capture startup failed")
-            stopCapture()
-            stopSelf()
-            START_NOT_STICKY
+            stopCapture(); stopSelf(); START_NOT_STICKY
         }
     }
 
     private fun startCaptureForeground() {
         val manager = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= 26) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "PoolAim screen analysis", NotificationManager.IMPORTANCE_LOW))
-        }
-        val stopIntent = Intent(this, ScreenCaptureService::class.java).setAction(ACTION_STOP)
-        val pending = PendingIntent.getService(this, 71, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
+        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "PoolAim screen analysis", NotificationManager.IMPORTANCE_LOW))
+        val pending = PendingIntent.getService(this, 71,
+            Intent(this, ScreenCaptureService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0))
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("PoolAim Pro Max")
-            .setContentText("On-device live analysis is active")
-            .setOngoing(true)
-            .addAction(0, "Stop", pending)
-            .build()
+            .setSmallIcon(android.R.drawable.ic_menu_view).setContentTitle("PoolAim Pro Max")
+            .setContentText("On-device live analysis is active").setOngoing(true)
+            .addAction(0, "Stop", pending).build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         else startForeground(NOTIFICATION_ID, notification)
     }
@@ -100,7 +86,6 @@ class ScreenCaptureService : Service() {
         analyzer = GameFrameAnalyzer()
         worker = HandlerThread("PoolAimVision").also { it.start() }
         workerHandler = Handler(worker!!.looper)
-
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         val display = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
@@ -118,17 +103,11 @@ class ScreenCaptureService : Service() {
             } catch (error: Exception) {
                 Log.w(TAG, "Frame processing failed", error)
                 publishResult(0, displayedFps, error.message ?: "frame processing failed")
-            } finally {
-                frame?.close()
-            }
+            } finally { frame?.close() }
         }, workerHandler)
-
         val mp = projection ?: error("MediaProjection not available")
         mp.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() {
-                stopCapture()
-                stopSelf()
-            }
+            override fun onStop() { stopCapture(); stopSelf() }
         }, workerHandler)
         virtualDisplay = mp.createVirtualDisplay("PoolAimLiveAnalysis", width, height, metrics.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.surface, null, workerHandler)
@@ -145,36 +124,36 @@ class ScreenCaptureService : Service() {
         try {
             plane.buffer.rewind()
             padded.copyPixelsFromBuffer(plane.buffer)
-            val bitmap = if (paddedWidth == image.width) padded else
-                Bitmap.createBitmap(padded, 0, 0, image.width, image.height).also { crop = it }
+            val bitmap = if (paddedWidth == image.width) padded else Bitmap.createBitmap(padded, 0, 0, image.width, image.height).also { crop = it }
             val rgba = Mat()
             val bgr = Mat()
             try {
                 Utils.bitmapToMat(bitmap, rgba)
                 Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
-                val analysis = analyzer?.analyze(bgr) ?: return
+                val result = analyzer?.analyze(bgr) ?: return
                 val t = SystemClock.elapsedRealtime()
                 if (fpsWindowAt == 0L) fpsWindowAt = t
                 framesInWindow++
-                if (t - fpsWindowAt >= 1000L) {
-                    displayedFps = framesInWindow
-                    framesInWindow = 0
-                    fpsWindowAt = t
-                }
-                publishResult(analysis.candidates.size, displayedFps, null)
-            } finally {
-                rgba.release()
-                bgr.release()
-            }
+                if (t - fpsWindowAt >= 1000L) { displayedFps = framesInWindow; framesInWindow = 0; fpsWindowAt = t }
+                val candidates = result.candidates
+                publishResult(candidates.size, displayedFps, null,
+                    candidates.map { it.centerScreen.x.toFloat() }.toFloatArray(),
+                    candidates.map { it.centerScreen.y.toFloat() }.toFloatArray(),
+                    candidates.map { it.radiusScreenPixels.toFloat() }.toFloatArray(),
+                    result.frameWidth, result.frameHeight)
+            } finally { rgba.release(); bgr.release() }
         } finally {
             crop?.let { if (!it.isRecycled) it.recycle() }
             if (!padded.isRecycled) padded.recycle()
         }
     }
 
-    private fun publishResult(count: Int, fps: Int, warning: String?) {
+    private fun publishResult(count: Int, fps: Int, warning: String?, xs: FloatArray? = null,
+        ys: FloatArray? = null, radii: FloatArray? = null, width: Int = 0, height: Int = 0) {
         val intent = Intent(ACTION_ANALYSIS_UPDATE).setPackage(packageName)
             .putExtra(EXTRA_CANDIDATE_COUNT, count).putExtra(EXTRA_ANALYSIS_FPS, fps)
+            .putExtra(EXTRA_XS, xs).putExtra(EXTRA_YS, ys).putExtra(EXTRA_RADII, radii)
+            .putExtra(EXTRA_FRAME_WIDTH, width).putExtra(EXTRA_FRAME_HEIGHT, height)
         if (warning != null) intent.putExtra(EXTRA_ANALYSIS_WARNING, warning)
         sendBroadcast(intent)
     }
@@ -204,8 +183,13 @@ class ScreenCaptureService : Service() {
         const val EXTRA_CANDIDATE_COUNT = "poolaim.capture.CANDIDATE_COUNT"
         const val EXTRA_ANALYSIS_FPS = "poolaim.capture.ANALYSIS_FPS"
         const val EXTRA_ANALYSIS_WARNING = "poolaim.capture.ANALYSIS_WARNING"
+        const val EXTRA_XS = "poolaim.capture.XS"
+        const val EXTRA_YS = "poolaim.capture.YS"
+        const val EXTRA_RADII = "poolaim.capture.RADII"
+        const val EXTRA_FRAME_WIDTH = "poolaim.capture.FRAME_WIDTH"
+        const val EXTRA_FRAME_HEIGHT = "poolaim.capture.FRAME_HEIGHT"
         private const val TAG = "PoolAimCapture"
-        private const val CHANNEL_ID = "poolaim_screen_capture"
+        private const val CHANNEL_ID = "poolaim_screen_analysis"
         private const val NOTIFICATION_ID = 7102
     }
 }
