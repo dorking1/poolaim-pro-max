@@ -1,5 +1,10 @@
 package com.poolaim.promax.ui.playergroup
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,10 +26,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.poolaim.promax.R
 import com.poolaim.promax.domain.model.PlayerGroup
+import com.poolaim.promax.overlay.FloatingAimService
 
 /**
  * Player group selection screen: solids, stripes, 8-ball, or custom.
@@ -33,6 +42,19 @@ fun PlayerGroupScreen(
     onConfirmed: () -> Unit,
 ) {
     val selected by viewModel.selectedGroup.collectAsState()
+    val context = LocalContext.current
+
+    fun enableOverlayIfAllowed() {
+        if (Settings.canDrawOverlays(context)) {
+            context.startService(Intent(context, FloatingAimService::class.java))
+        }
+    }
+
+    val overlayPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        enableOverlayIfAllowed()
+    }
 
     Column(
         modifier = Modifier
@@ -43,12 +65,46 @@ fun PlayerGroupScreen(
     ) {
         Text(
             text = stringResource(R.string.player_group_title),
-            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineSmall,
         )
         Text(
             text = stringResource(R.string.player_group_subtitle),
-            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium,
         )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            ),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("الأيقونة العائمة", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "فعّل زر PoolAim فوق اللعبة. يتطلب Android منح إذن الظهور فوق التطبيقات الأخرى.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(
+                    onClick = {
+                        if (Settings.canDrawOverlays(context)) {
+                            enableOverlayIfAllowed()
+                        } else {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}"),
+                            )
+                            overlayPermissionLauncher.launch(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("تفعيل الأيقونة العائمة")
+                }
+            }
+        }
 
         val options = listOf(
             PlayerGroup.SOLIDS to R.string.player_group_solid,
@@ -67,9 +123,9 @@ fun PlayerGroupScreen(
                     ),
                 colors = CardDefaults.cardColors(
                     containerColor = if (selected == group) {
-                        androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.primaryContainer
                     } else {
-                        androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+                        MaterialTheme.colorScheme.surfaceVariant
                     },
                 ),
             ) {
