@@ -63,3 +63,7 @@ cd poolaim-pro-max
 - SHA-256: `365fd48928caf7ed182918fd817cf7899596447811451da3319d17b8e74e97ce`.
 - لم يُجرَ تثبيت أو اختبار واجهة على هاتف أو محاكي، ولم تُقَس دقة الرؤية الحاسوبية أو الأداء. لا يُعد هذا قبولًا للمراحل A–H.
 - لا يوجد إعداد GitHub Actions للبناء التلقائي ضمن هذا الفرع.
+
+## Floating overlay implementation status
+
+The current development branch includes an Android overlay permission declaration, a non-exported `FloatingAimService`, and a start-screen control that asks the user to grant `SYSTEM_ALERT_WINDOW` before showing a draggable PoolAim bubble. The bubble panel explicitly states that live path analysis is not available yet. This is an initial overlay shell only: it does not capture the game screen, detect live balls, or draw calculated trajectories over another app. Those features require a user-approved MediaProjection capture flow, robust frame-to-table coordinate calibration, and validation against representative screenshots before any accuracy claims.
