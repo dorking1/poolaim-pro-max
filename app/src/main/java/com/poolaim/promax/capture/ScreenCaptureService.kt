@@ -142,6 +142,8 @@ class ScreenCaptureService : Service() {
                     candidates.map { it.radiusScreenPixels.toFloat() }.toFloatArray(),
                     candidates.map { it.color.confidence.toFloat() }.toFloatArray(),
                     candidates.map { it.color.family.name }.toTypedArray(),
+                    candidates.map { it.trackId }.toLongArray(),
+                    candidates.map { it.ageFrames }.toIntArray(),
                     result.frameWidth, result.frameHeight)
             } finally { rgba.release(); bgr.release() }
         } finally {
@@ -152,11 +154,13 @@ class ScreenCaptureService : Service() {
 
     private fun publishResult(count: Int, fps: Int, warning: String?, xs: FloatArray? = null,
         ys: FloatArray? = null, radii: FloatArray? = null, confidence: FloatArray? = null,
-        families: Array<String>? = null, width: Int = 0, height: Int = 0) {
+        families: Array<String>? = null, trackIds: LongArray? = null, ages: IntArray? = null,
+        width: Int = 0, height: Int = 0) {
         val intent = Intent(ACTION_ANALYSIS_UPDATE).setPackage(packageName)
             .putExtra(EXTRA_CANDIDATE_COUNT, count).putExtra(EXTRA_ANALYSIS_FPS, fps)
             .putExtra(EXTRA_XS, xs).putExtra(EXTRA_YS, ys).putExtra(EXTRA_RADII, radii)
             .putExtra(EXTRA_CONFIDENCE, confidence).putExtra(EXTRA_FAMILIES, families)
+            .putExtra(EXTRA_TRACK_IDS, trackIds).putExtra(EXTRA_TRACK_AGES, ages)
             .putExtra(EXTRA_FRAME_WIDTH, width).putExtra(EXTRA_FRAME_HEIGHT, height)
         if (warning != null) intent.putExtra(EXTRA_ANALYSIS_WARNING, warning)
         sendBroadcast(intent)
@@ -192,6 +196,8 @@ class ScreenCaptureService : Service() {
         const val EXTRA_RADII = "poolaim.capture.RADII"
         const val EXTRA_CONFIDENCE = "poolaim.capture.CONFIDENCE"
         const val EXTRA_FAMILIES = "poolaim.capture.FAMILIES"
+        const val EXTRA_TRACK_IDS = "poolaim.capture.TRACK_IDS"
+        const val EXTRA_TRACK_AGES = "poolaim.capture.TRACK_AGES"
         const val EXTRA_FRAME_WIDTH = "poolaim.capture.FRAME_WIDTH"
         const val EXTRA_FRAME_HEIGHT = "poolaim.capture.FRAME_HEIGHT"
         private const val TAG = "PoolAimCapture"
