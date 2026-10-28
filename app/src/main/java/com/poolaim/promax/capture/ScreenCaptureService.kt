@@ -115,7 +115,7 @@ class ScreenCaptureService : Service() {
 
     private fun analyzeFrame(image: Image) {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastFrameAt < 100L) return
+        if (now - lastFrameAt < 160L) return
         lastFrameAt = now
         val plane = image.planes.firstOrNull() ?: return
         val paddedWidth = (plane.rowStride / plane.pixelStride).coerceAtLeast(image.width)
@@ -127,25 +127,46 @@ class ScreenCaptureService : Service() {
             val bitmap = if (paddedWidth == image.width) padded else Bitmap.createBitmap(padded, 0, 0, image.width, image.height).also { crop = it }
             val rgba = Mat()
             val bgr = Mat()
+            val analysisFrame = Mat()
             try {
                 Utils.bitmapToMat(bitmap, rgba)
                 Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
-                val result = analyzer?.analyze(bgr) ?: return
+
+                // Cap the image size to reduce Hough-circle CPU cost. Candidate
+                // positions are mapped back to original screen coordinates below.
+                val originalWidth = bgr.cols()
+                val originalHeight = bgr.rows()
+                val scale = minOf(1.0, MAX_ANALYSIS_DIMENSION.toDouble() /
+                    maxOf(originalWidth, originalHeight).toDouble())
+                if (scale < 1.0) {
+                    Imgproc.resize(
+                        bgr,
+                        analysisFrame,
+                        org.opencv.core.Size(
+                            (originalWidth * scale).toInt().coerceAtLeast(1).toDouble(),
+                            (originalHeight * scale).toInt().coerceAtLeast(1).toDouble(),
+                        ),
+                    )
+                } else {
+                    bgr.copyTo(analysisFrame)
+                }
+                val result = analyzer?.analyze(analysisFrame) ?: return
+                val toScreen = 1.0 / scale
                 val t = SystemClock.elapsedRealtime()
                 if (fpsWindowAt == 0L) fpsWindowAt = t
                 framesInWindow++
                 if (t - fpsWindowAt >= 1000L) { displayedFps = framesInWindow; framesInWindow = 0; fpsWindowAt = t }
                 val candidates = result.candidates
                 publishResult(candidates.size, displayedFps, null,
-                    candidates.map { it.centerScreen.x.toFloat() }.toFloatArray(),
-                    candidates.map { it.centerScreen.y.toFloat() }.toFloatArray(),
-                    candidates.map { it.radiusScreenPixels.toFloat() }.toFloatArray(),
+                    candidates.map { (it.centerScreen.x * toScreen).toFloat() }.toFloatArray(),
+                    candidates.map { (it.centerScreen.y * toScreen).toFloat() }.toFloatArray(),
+                    candidates.map { (it.radiusScreenPixels * toScreen).toFloat() }.toFloatArray(),
                     candidates.map { it.color.confidence.toFloat() }.toFloatArray(),
                     candidates.map { it.color.family.name }.toTypedArray(),
                     candidates.map { it.trackId }.toLongArray(),
                     candidates.map { it.ageFrames }.toIntArray(),
-                    result.frameWidth, result.frameHeight)
-            } finally { rgba.release(); bgr.release() }
+                    originalWidth, originalHeight)
+            } finally { rgba.release(); bgr.release(); analysisFrame.release() }
         } finally {
             crop?.let { if (!it.isRecycled) it.recycle() }
             if (!padded.isRecycled) padded.recycle()
@@ -203,5 +224,6 @@ class ScreenCaptureService : Service() {
         private const val TAG = "PoolAimCapture"
         private const val CHANNEL_ID = "poolaim_screen_analysis"
         private const val NOTIFICATION_ID = 7102
+        private const val MAX_ANALYSIS_DIMENSION = 960
     }
 }
