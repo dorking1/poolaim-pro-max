@@ -117,9 +117,9 @@ fun PlayerGroupScreen(
                     Text("Enable floating bubble")
                 }
 
-                Text("Screen capture", style = MaterialTheme.typography.titleMedium)
+                Text("Live table analysis", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Start a temporary screen-capture session. Android will show its own consent prompt. This build logs captured frame sizes; ball detection and aim overlays are not connected to capture yet.",
+                    "Analyze the supplied 8-ball game's screen in real time. Android must show its screen-capture consent prompt. Detected circular candidates and estimated color families will be outlined locally; calibration and numbered-ball recognition are still experimental.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Button(
@@ -129,7 +129,7 @@ fun PlayerGroupScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Allow and start screen capture")
+                    Text("Allow and start live analysis")
                 }
             }
         }
