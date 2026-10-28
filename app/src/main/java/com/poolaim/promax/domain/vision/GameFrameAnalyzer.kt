@@ -1,6 +1,7 @@
 package com.poolaim.promax.domain.vision
 
 import org.opencv.core.Mat
+import org.opencv.imgproc.Imgproc
 import com.poolaim.promax.domain.physics.v1.Point2
 
 /**
@@ -35,7 +36,9 @@ class GameFrameAnalyzer(
         val width = frameBgr.cols()
         val height = frameBgr.rows()
         val proposals = circleProposer.detect(frameBgr)
-        val candidates = proposals.mapNotNull { proposal ->
+        val hsv = Mat()
+        Imgproc.cvtColor(frameBgr, hsv, Imgproc.COLOR_BGR2HSV)
+        val candidates = try { proposals.mapNotNull { proposal ->
             val tableCenter = SuppliedGameTableProfile.toTableCoordinates(
                 Point2(proposal.centerX, proposal.centerY),
                 width,
@@ -46,8 +49,8 @@ class GameFrameAnalyzer(
                 tableCenter.y !in 0.0..SuppliedGameTableProfile.bounds.height
             ) return@mapNotNull null
 
-            val color = colorHeuristic.estimate(
-                frameBgr,
+            val color = colorHeuristic.estimateHsv(
+                hsv,
                 proposal.centerX,
                 proposal.centerY,
                 proposal.radius,
@@ -58,6 +61,8 @@ class GameFrameAnalyzer(
                 radiusScreenPixels = proposal.radius,
                 color = color,
             )
+        } } finally {
+            hsv.release()
         }
 
         val frameAspect = width.toDouble() / height.toDouble()
