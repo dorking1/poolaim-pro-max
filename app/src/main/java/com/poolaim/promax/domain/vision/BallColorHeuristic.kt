@@ -7,8 +7,8 @@ import org.opencv.imgproc.Imgproc
 import kotlin.math.roundToInt
 
 /**
- * Lightweight HSV color-family heuristic for candidate balls.
- * Does not infer printed numbers or solid/stripe group.
+ * Fast HSV color-family heuristic. Estimates are visual hints only: highlights,
+ * stripes, shadows and game effects can change the dominant color.
  */
 class BallColorHeuristic {
     enum class ColorFamily { WHITE_OR_CUE, YELLOW, ORANGE, RED, PURPLE, BLUE, GREEN, UNKNOWN }
@@ -21,21 +21,35 @@ class BallColorHeuristic {
         val confidence: Double,
     )
 
+    /** Convenience API for a single estimate; frame analysis should use estimateHsv for speed. */
     fun estimate(frameBgr: Mat, centerX: Double, centerY: Double, radius: Double): Estimate {
         require(!frameBgr.empty()) { "Input frame must not be empty" }
         require(frameBgr.channels() == 3) { "Expected a BGR frame" }
+        val hsv = Mat()
+        return try {
+            Imgproc.cvtColor(frameBgr, hsv, Imgproc.COLOR_BGR2HSV)
+            estimateHsv(hsv, centerX, centerY, radius)
+        } finally {
+            hsv.release()
+        }
+    }
+
+    /** Reuses one HSV conversion for all balls in a frame, reducing per-frame work. */
+    fun estimateHsv(frameHsv: Mat, centerX: Double, centerY: Double, radius: Double): Estimate {
+        require(!frameHsv.empty()) { "Input HSV frame must not be empty" }
+        require(frameHsv.channels() == 3) { "Expected an HSV frame" }
         require(radius > 1.0) { "Ball radius must be greater than one pixel" }
 
-        val half = (radius * 0.42).roundToInt().coerceAtLeast(1)
-        val left = (centerX.roundToInt() - half).coerceIn(0, frameBgr.cols() - 1)
-        val top = (centerY.roundToInt() - half).coerceIn(0, frameBgr.rows() - 1)
-        val right = (centerX.roundToInt() + half + 1).coerceIn(left + 1, frameBgr.cols())
-        val bottom = (centerY.roundToInt() + half + 1).coerceIn(top + 1, frameBgr.rows())
-        val patch = frameBgr.submat(Rect(left, top, right - left, bottom - top))
-        val hsv = Mat()
+        val half = (radius * 0.34).roundToInt().coerceAtLeast(1)
+        val cx = centerX.roundToInt()
+        val cy = centerY.roundToInt()
+        val left = (cx - half).coerceIn(0, frameHsv.cols() - 1)
+        val top = (cy - half).coerceIn(0, frameHsv.rows() - 1)
+        val right = (cx + half + 1).coerceIn(left + 1, frameHsv.cols())
+        val bottom = (cy + half + 1).coerceIn(top + 1, frameHsv.rows())
+        val patch = frameHsv.submat(Rect(left, top, right - left, bottom - top))
         try {
-            Imgproc.cvtColor(patch, hsv, Imgproc.COLOR_BGR2HSV)
-            val mean = Core.mean(hsv)
+            val mean = Core.mean(patch)
             val hue = mean.`val`[0]
             val saturation = mean.`val`[1]
             val value = mean.`val`[2]
@@ -61,7 +75,6 @@ class BallColorHeuristic {
             return Estimate(family, hue, saturation, value, confidence)
         } finally {
             patch.release()
-            hsv.release()
         }
     }
 }
