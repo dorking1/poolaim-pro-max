@@ -24,16 +24,21 @@ class DetectionOverlayView(context: Context) : View(context) {
     private var radii = FloatArray(0)
     private var confidence = FloatArray(0)
     private var families = emptyArray<String>()
+    private var trackIds = LongArray(0)
+    private var trackAges = IntArray(0)
     private var sourceWidth = 1
     private var sourceHeight = 1
 
     fun updateCandidates(x: FloatArray?, y: FloatArray?, r: FloatArray?,
-        confidenceValues: FloatArray?, colorFamilies: Array<String>?, frameWidth: Int, frameHeight: Int) {
+        confidenceValues: FloatArray?, colorFamilies: Array<String>?, ids: LongArray?, ages: IntArray?,
+        frameWidth: Int, frameHeight: Int) {
         xs = x ?: FloatArray(0)
         ys = y ?: FloatArray(0)
         radii = r ?: FloatArray(0)
         confidence = confidenceValues ?: FloatArray(0)
         families = colorFamilies ?: emptyArray()
+        trackIds = ids ?: LongArray(0)
+        trackAges = ages ?: IntArray(0)
         sourceWidth = frameWidth.coerceAtLeast(1)
         sourceHeight = frameHeight.coerceAtLeast(1)
         postInvalidate()
@@ -64,8 +69,11 @@ class DetectionOverlayView(context: Context) : View(context) {
             }
             canvas.drawCircle(x, y, radius, paint)
             canvas.drawCircle(x, y, 2.5f, paint)
-            val label = if (family == "UNKNOWN") "?" else family.replace("_OR_CUE", "").take(3)
-            canvas.drawText(label, x + radius + 3f, y - radius, textPaint)
+            val familyLabel = if (family == "UNKNOWN") "?" else family.replace("_OR_CUE", "").take(3)
+            val id = trackIds.getOrNull(i)?.toString() ?: "?"
+            val age = trackAges.getOrNull(i) ?: 1
+            canvas.drawText("$id:$familyLabel", x + radius + 3f, y - radius, textPaint)
+            if (age > 1) canvas.drawText("stable $age", x + radius + 3f, y + radius + textPaint.textSize, textPaint)
         }
     }
 }
