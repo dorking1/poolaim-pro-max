@@ -39,6 +39,8 @@ class FloatingAimService : Service() {
                 intent.getFloatArrayExtra(ScreenCaptureService.EXTRA_RADII),
                 intent.getFloatArrayExtra(ScreenCaptureService.EXTRA_CONFIDENCE),
                 intent.getStringArrayExtra(ScreenCaptureService.EXTRA_FAMILIES),
+                intent.getLongArrayExtra(ScreenCaptureService.EXTRA_TRACK_IDS),
+                intent.getIntArrayExtra(ScreenCaptureService.EXTRA_TRACK_AGES),
                 intent.getIntExtra(ScreenCaptureService.EXTRA_FRAME_WIDTH, 1),
                 intent.getIntExtra(ScreenCaptureService.EXTRA_FRAME_HEIGHT, 1),
             )
@@ -117,7 +119,7 @@ class FloatingAimService : Service() {
             setOnClickListener {
                 startService(Intent(this@FloatingAimService,ScreenCaptureService::class.java).setAction(ScreenCaptureService.ACTION_STOP))
                 status?.text="Analysis stopped."
-                detectionView?.updateCandidates(null,null,null,null,null,1,1)
+                detectionView?.updateCandidates(null,null,null,null,null,null,null,1,1)
             }
         })
         box.addView(label("Hide controls",15f).apply { setOnClickListener { stopSelf() } })
