@@ -22,7 +22,9 @@ class FloatingAimService : Service() {
     private var bubble: TextView? = null
     private var panel: LinearLayout? = null
     private var status: TextView? = null
+    private var detectionView: DetectionOverlayView? = null
     private var receiverReady = false
+
     private val resultReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != ScreenCaptureService.ACTION_ANALYSIS_UPDATE) return
@@ -31,6 +33,13 @@ class FloatingAimService : Service() {
             val fps = intent.getIntExtra(ScreenCaptureService.EXTRA_ANALYSIS_FPS, 0)
             status?.text = if (warning != null) "Analysis error: " + warning
                 else "Live analysis active\nBall candidates: " + count + "\nAnalysis rate: " + fps + " frames/s"
+            detectionView?.updateCandidates(
+                intent.getFloatArrayExtra(ScreenCaptureService.EXTRA_XS),
+                intent.getFloatArrayExtra(ScreenCaptureService.EXTRA_YS),
+                intent.getFloatArrayExtra(ScreenCaptureService.EXTRA_RADII),
+                intent.getIntExtra(ScreenCaptureService.EXTRA_FRAME_WIDTH, 1),
+                intent.getIntExtra(ScreenCaptureService.EXTRA_FRAME_HEIGHT, 1),
+            )
         }
     }
 
@@ -44,11 +53,23 @@ class FloatingAimService : Service() {
             registerReceiver(resultReceiver, filter)
         }
         receiverReady = true
+        showDetectionOverlay()
         showBubble()
     }
 
     private fun type() = if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+
+    private fun showDetectionOverlay() {
+        val view = DetectionOverlayView(this)
+        val p = WindowManager.LayoutParams(-1, -1, type(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.START }
+        detectionView = view
+        wm.addView(view, p)
+    }
 
     private fun showBubble() {
         val view = TextView(this).apply {
@@ -94,6 +115,7 @@ class FloatingAimService : Service() {
             setOnClickListener {
                 startService(Intent(this@FloatingAimService,ScreenCaptureService::class.java).setAction(ScreenCaptureService.ACTION_STOP))
                 status?.text="Analysis stopped."
+                detectionView?.updateCandidates(null,null,null,1,1)
             }
         })
         box.addView(label("Hide controls",15f).apply { setOnClickListener { stopSelf() } })
@@ -108,9 +130,11 @@ class FloatingAimService : Service() {
     }
 
     override fun onDestroy() {
-        panel?.let { runCatching { wm.removeView(it) } }; bubble?.let { runCatching { wm.removeView(it) } }
+        panel?.let { runCatching { wm.removeView(it) } }
+        bubble?.let { runCatching { wm.removeView(it) } }
+        detectionView?.let { runCatching { wm.removeView(it) } }
         if (receiverReady) runCatching { unregisterReceiver(resultReceiver) }
-        panel=null; bubble=null; status=null; super.onDestroy()
+        panel=null; bubble=null; status=null; detectionView=null; super.onDestroy()
     }
     override fun onBind(intent:Intent?):IBinder?=null
 }
