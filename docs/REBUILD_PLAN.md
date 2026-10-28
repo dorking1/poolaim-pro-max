@@ -1,70 +1,36 @@
-# PoolAim Pro Max — Rebuild Specification
+# PoolAim Pro Max — Rebuild Roadmap
 
-## Product goal
+## Current branch
+- Working branch: `rebuild/pro-max-v1`
+- Target device: Android; user-provided reference screenshots show a landscape 8-ball pool table.
+- Current workflow: Android unit tests, lint, and debug APK assembly.
 
-Rebuild the Android app as a maintainable, offline-first Kotlin application with a polished interface, a user-controlled floating overlay, consent-based screen capture, table/ball detection, calibrated 2D geometry, and a tested trajectory engine. Accuracy must be measured against labelled test frames; never claim pixel-level accuracy or a win-rate without evidence.
+## Implemented foundation
+- Floating overlay service with user-controlled overlay permission.
+- Reference table profile based on the supplied 1536×720 screenshots.
+- Table-local coordinate conversion and six estimated pocket centers.
+- OpenCV Hough-circle proposals restricted to the approximate cloth region.
+- HSV color-family estimates with confidence values.
+- Frame analyzer composing circle proposals, color estimates, and table coordinates.
+- Consent-driven MediaProjection foreground service that receives and closes frames.
+- CI workflow for unit tests, lint, debug APK assembly, and artifact upload.
 
-## Reference projects reviewed
+## Important limitations
+- The table boundaries and pocket positions are estimates; device/layout calibration is still required.
+- Hough circles can produce false positives and miss overlapping or blurred balls.
+- HSV estimates are not reliable ball identity; number recognition and stripe/solid classification are not implemented.
+- Screen capture currently logs frame dimensions only. It is not yet connected to the vision analyzer or an on-screen aim overlay.
+- Geometry recommendations require additional collision, cushion, and pocket validation against actual gameplay.
 
-- `abwahidmoto-beep/PoolAimAssist`: Android/Kotlin reference for MediaProjection capture, overlay service, manual pocket calibration, and trajectory rendering. Review its exact license and attribution requirements before copying any code.
-- `carrotdan/ai-billiard-system`: architecture reference for detection, table perspective correction, cue detection, shot scoring, and bank-shot simulation. It is Python-based; port concepts, not its Python runtime.
-- `tailuge/billiards`: mature billiards simulation reference with collision, spin, cushion response, tests, and calibration ideas. It is GPL-3.0, so do not copy or port substantial code into a differently licensed app unless the distribution plan complies with GPL-3.0. Use published physics references and independently implement compatible models instead.
+## Next milestones
+1. Confirm the latest Android CI build; fix all compile, lint, and unit-test failures.
+2. Add unit tests and image-based validation for the vision pipeline.
+3. Convert MediaProjection frames to a controlled, reusable OpenCV input format and run analysis off the UI thread.
+4. Add an explicit calibration flow for cloth bounds, pockets, and ball radius.
+5. Add user-correctable ball candidates and confidence indicators before trusting automatic detection.
+6. Validate direct-shot geometry, ghost-ball targets, obstruction checks, and cushion reflections with deterministic tests.
+7. Draw proposed paths in a clearly separate overlay and allow users to toggle or dismiss it.
+8. Test on the user's Android device and supplied game before producing a release build.
 
-No third-party source code, model weights, or assets should be copied until the upstream license and attribution requirements are confirmed.
-
-## Architecture
-
-- **app**: Jetpack Compose UI, onboarding, settings, permission explanation, analysis workflow.
-- **capture**: explicit MediaProjection consent flow, foreground service, frame lifecycle, rotation/resolution handling, clear stop action and Android-version compliance.
-- **overlay**: draggable control bubble, hide/show, transparent non-touchable drawing layer, touch-through validation, safe teardown and permission recovery.
-- **vision**: preprocessing, felt/table candidate detection, perspective homography, ball proposals, color/type classification, confidence scores, temporal tracking and manual correction.
-- **calibration**: six-pocket calibration and table geometry; store normalized coordinates per device/game layout; recalibrate after orientation/resolution changes.
-- **physics**: normalized coordinate model, ghost-ball geometry, obstruction tests, direct and bank shots, ball-ball and ball-cushion collision simulation, deterministic scoring.
-- **analysis**: candidate generation, uncertainty propagation, ranked suggestions, clear confidence/quality labels.
-- **history**: local Room history, replay snapshots, settings and privacy controls.
-- **quality**: unit tests, image fixtures, golden-output tests, performance benchmarks, lint, CI artifact upload.
-
-## Delivery stages
-
-### Stage 1 — Foundation and build reliability
-- Fresh development branch; clean build configuration and CI.
-- Navigation and a polished dark/light UI with Arabic RTL and English localization.
-- Explicit feature status and permission rationale; no fake controls.
-
-### Stage 2 — Overlay and screen capture
-- Explain why permissions are needed; request overlay permission and MediaProjection consent only when the user enables the feature.
-- Start/stop foreground service correctly; draggable bubble; hide and restore; persistent notification with stop action.
-- Capture frames only during the user-approved session; release projection, reader and virtual display on stop; handle Android 14+ consent rules.
-
-### Stage 3 — Vision and calibration
-- Import screenshot and live capture use the same frame pipeline.
-- Perspective correction to a normalized table coordinate system.
-- Detect cue ball and object-ball candidates; expose confidence; allow tap/drag/add/remove correction.
-- Manual six-pocket calibration fallback. Never silently treat guessed geometry as confirmed.
-
-### Stage 4 — Physics and shot planning
-- Unit-tested vector/segment geometry and ball radius normalization.
-- Direct shots, bank shots, blockers, ghost-ball contact point, collision chains and approximate post-shot cue-ball path.
-- Scoring labels geometry quality/difficulty, not an unvalidated probability of success.
-- Parameterized friction and cushion restitution; simulation remains approximate until calibrated against reference data.
-
-### Stage 5 — Professional UI and training
-- Live overlay toggles for cue path, object path, bank path, blockers and target pocket.
-- Fine adjustment, zoom, undo/redo, pause/freeze frame, recalibrate and screenshot review.
-- Practice mode, shot history, replay, custom groups/rules and accessible settings.
-
-### Stage 6 — Validation and release
-- Build/test/lint on every push and upload debug APK artifact.
-- Fixture-based detection tests across varied table colors, resolutions, overlays and occlusions.
-- Performance and battery profiling on representative Android devices.
-- Test install on a physical device; fix crashes, rotation and permission revocation.
-- Release signing only with the owner's own private keystore; never commit signing secrets.
-
-## Acceptance criteria
-
-- Build, unit tests, lint and CI all pass.
-- User can start/stop capture, move/hide/restore the bubble, and revoke permissions safely.
-- Every live result displays whether the table is calibrated and whether detection is uncertain.
-- All screen capture is user-consented, visible, local by default and stopped explicitly.
-- Direct/bank shot geometry has unit tests and documented limitations.
-- No feature is described as complete until implemented and verified on device.
+## Quality gate
+Do not call the app complete or advertise live aiming as functional until CI passes, capture works on a real device, and the detected table/balls and paths have been checked against representative screenshots and gameplay.
