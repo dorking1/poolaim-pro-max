@@ -1,7 +1,10 @@
 package com.poolaim.promax.overlay
 
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
@@ -19,8 +22,30 @@ class FloatingAimService : Service() {
     private var bubble: TextView? = null
     private var panel: LinearLayout? = null
     private var status: TextView? = null
+    private var receiverReady = false
+    private val resultReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ScreenCaptureService.ACTION_ANALYSIS_UPDATE) return
+            val warning = intent.getStringExtra(ScreenCaptureService.EXTRA_ANALYSIS_WARNING)
+            val count = intent.getIntExtra(ScreenCaptureService.EXTRA_CANDIDATE_COUNT, 0)
+            val fps = intent.getIntExtra(ScreenCaptureService.EXTRA_ANALYSIS_FPS, 0)
+            status?.text = if (warning != null) "Analysis error: " + warning
+                else "Live analysis active\nBall candidates: " + count + "\nAnalysis rate: " + fps + " frames/s"
+        }
+    }
 
-    override fun onCreate() { super.onCreate(); wm = getSystemService(WINDOW_SERVICE) as WindowManager; showBubble() }
+    override fun onCreate() {
+        super.onCreate()
+        wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        val filter = IntentFilter(ScreenCaptureService.ACTION_ANALYSIS_UPDATE)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(resultReceiver, filter, RECEIVER_NOT_EXPORTED)
+        else {
+            @Suppress("DEPRECATION")
+            registerReceiver(resultReceiver, filter)
+        }
+        receiverReady = true
+        showBubble()
+    }
 
     private fun type() = if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
@@ -84,6 +109,7 @@ class FloatingAimService : Service() {
 
     override fun onDestroy() {
         panel?.let { runCatching { wm.removeView(it) } }; bubble?.let { runCatching { wm.removeView(it) } }
+        if (receiverReady) runCatching { unregisterReceiver(resultReceiver) }
         panel=null; bubble=null; status=null; super.onDestroy()
     }
     override fun onBind(intent:Intent?):IBinder?=null
