@@ -5,6 +5,9 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <!-- Requested only when the user explicitly enables the floating control. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -30,6 +33,9 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
-    </application>
 
+        <service
+            android:name=".overlay.FloatingAimService"
+            android:exported="false" />
+    </application>
 </manifest>
