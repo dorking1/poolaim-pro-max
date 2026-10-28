@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
@@ -51,11 +52,12 @@ class FloatingAimService : Service() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val filter = IntentFilter(ScreenCaptureService.ACTION_ANALYSIS_UPDATE)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(resultReceiver, filter, RECEIVER_NOT_EXPORTED)
-        else {
-            @Suppress("DEPRECATION")
-            registerReceiver(resultReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            resultReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         receiverReady = true
         showDetectionOverlay()
         showBubble()
