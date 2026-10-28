@@ -140,6 +140,8 @@ class ScreenCaptureService : Service() {
                     candidates.map { it.centerScreen.x.toFloat() }.toFloatArray(),
                     candidates.map { it.centerScreen.y.toFloat() }.toFloatArray(),
                     candidates.map { it.radiusScreenPixels.toFloat() }.toFloatArray(),
+                    candidates.map { it.color.confidence.toFloat() }.toFloatArray(),
+                    candidates.map { it.color.family.name }.toTypedArray(),
                     result.frameWidth, result.frameHeight)
             } finally { rgba.release(); bgr.release() }
         } finally {
@@ -149,10 +151,12 @@ class ScreenCaptureService : Service() {
     }
 
     private fun publishResult(count: Int, fps: Int, warning: String?, xs: FloatArray? = null,
-        ys: FloatArray? = null, radii: FloatArray? = null, width: Int = 0, height: Int = 0) {
+        ys: FloatArray? = null, radii: FloatArray? = null, confidence: FloatArray? = null,
+        families: Array<String>? = null, width: Int = 0, height: Int = 0) {
         val intent = Intent(ACTION_ANALYSIS_UPDATE).setPackage(packageName)
             .putExtra(EXTRA_CANDIDATE_COUNT, count).putExtra(EXTRA_ANALYSIS_FPS, fps)
             .putExtra(EXTRA_XS, xs).putExtra(EXTRA_YS, ys).putExtra(EXTRA_RADII, radii)
+            .putExtra(EXTRA_CONFIDENCE, confidence).putExtra(EXTRA_FAMILIES, families)
             .putExtra(EXTRA_FRAME_WIDTH, width).putExtra(EXTRA_FRAME_HEIGHT, height)
         if (warning != null) intent.putExtra(EXTRA_ANALYSIS_WARNING, warning)
         sendBroadcast(intent)
@@ -186,6 +190,8 @@ class ScreenCaptureService : Service() {
         const val EXTRA_XS = "poolaim.capture.XS"
         const val EXTRA_YS = "poolaim.capture.YS"
         const val EXTRA_RADII = "poolaim.capture.RADII"
+        const val EXTRA_CONFIDENCE = "poolaim.capture.CONFIDENCE"
+        const val EXTRA_FAMILIES = "poolaim.capture.FAMILIES"
         const val EXTRA_FRAME_WIDTH = "poolaim.capture.FRAME_WIDTH"
         const val EXTRA_FRAME_HEIGHT = "poolaim.capture.FRAME_HEIGHT"
         private const val TAG = "PoolAimCapture"
