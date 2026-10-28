@@ -1,7 +1,9 @@
 package com.poolaim.promax.ui.playergroup
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.media.projection.MediaProjectionManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,12 +31,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.poolaim.promax.R
+import com.poolaim.promax.capture.ScreenCaptureService
 import com.poolaim.promax.domain.model.PlayerGroup
 import com.poolaim.promax.overlay.FloatingAimService
 
 /**
- * Start screen: choose the ball group or explicitly enable the floating control.
+ * Start screen: select a ball group, enable the optional overlay, or consent to screen capture.
  */
 @Composable
 fun PlayerGroupScreen(
@@ -46,16 +50,25 @@ fun PlayerGroupScreen(
 
     fun startOverlayIfPermitted() {
         if (Settings.canDrawOverlays(context)) {
-            runCatching {
-                context.startService(Intent(context, FloatingAimService::class.java))
-            }
+            runCatching { context.startService(Intent(context, FloatingAimService::class.java)) }
         }
     }
 
     val overlaySettingsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) {
-        startOverlayIfPermitted()
+    ) { startOverlayIfPermitted() }
+
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
+            val captureIntent = Intent(context, ScreenCaptureService::class.java).apply {
+                putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, result.resultCode)
+                putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+            }
+            ContextCompat.startForegroundService(context, captureIntent)
+        }
     }
 
     Column(
@@ -76,9 +89,7 @@ fun PlayerGroupScreen(
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            ),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -86,7 +97,7 @@ fun PlayerGroupScreen(
             ) {
                 Text("Floating controls", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Enable a movable PoolAim bubble. Android will ask you to allow display over other apps. Live game capture and path analysis are not available in this stage.",
+                    "Enable a movable PoolAim bubble. Android will ask you to allow display over other apps.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(
@@ -105,6 +116,21 @@ fun PlayerGroupScreen(
                 ) {
                     Text("Enable floating bubble")
                 }
+
+                Text("Screen capture", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Start a temporary screen-capture session. Android will show its own consent prompt. This build logs captured frame sizes; ball detection and aim overlays are not connected to capture yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(
+                    onClick = {
+                        val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                        screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Allow and start screen capture")
+                }
             }
         }
 
@@ -119,32 +145,18 @@ fun PlayerGroupScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .selectable(
-                        selected = selected == group,
-                        onClick = { viewModel.select(group) },
-                    ),
+                    .selectable(selected = selected == group, onClick = { viewModel.select(group) }),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (selected == group) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
+                    containerColor = if (selected == group) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant,
                 ),
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(
-                        selected = selected == group,
-                        onClick = { viewModel.select(group) },
-                    )
-                    Text(
-                        text = stringResource(labelRes),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
+                    RadioButton(selected = selected == group, onClick = { viewModel.select(group) })
+                    Text(text = stringResource(labelRes), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
@@ -155,9 +167,7 @@ fun PlayerGroupScreen(
                 onConfirmed()
             },
             enabled = selected != null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         ) {
             Text(stringResource(R.string.player_group_confirm))
         }
